@@ -1,0 +1,68 @@
+[project]
+name = "Frame-Sampling-Study"
+version = "1.0.0"
+description = ""
+authors = [
+    {name = "Yannis Tevissen", email = "yannis.tevissen@momentslab.com"},
+]
+dependencies = ["pydantic>=2.11.3",
+    "transformers==4.51.3",
+    "num2words>=0.5.14",
+    "flash-attn>=2.8.2",
+    "ninja>=1.11.1.4",
+    "pillow>=11.2.1",
+    "accelerate>=1.9.0",
+    "av>=14.3.0",
+    "huggingface-hub>=0.31.2",
+    "qwen-vl-utils>=0.0.11",
+    "torchvision>=0.22.0",
+    "dataclasses-json>=0.6.7",
+    "bson>=0.5.10",
+    "tqdm>=4.67.1",
+    "opencv-python>=4.11.0.86",
+    "sentencepiece>=0.2.0",
+    "einops>=0.8.1",
+    "timm>=1.0.15",
+    "numpy>=2.2.6",
+    "ipykernel>=6.29.5",
+    "moviepy==1.0.3",
+    "torch>=2.7.0",
+    "torchcodec>=0.4.0",
+    "nltk>=3.9.1",
+    "bert-score>=0.3.13",
+    "rouge-score>=0.1.2",
+    "evaluate>=0.4.4",
+    "scikit-learn>=1.7.0",
+    "scenedetect>=0.6.6",
+    "clip @ git+https://github.com/openai/CLIP.git",
+    "packaging>=25.0",
+    "torchinfo>=1.8.0",
+    "deepspeed>=0.17.2",
+    "yt-dlp>=2025.7.21"]
+requires-python = ">=3.10,<3.13"
+readme = "README.md"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+
+[tool.pdm]
+distribution = true
+
+[tool.pdm.scripts]
+vlm = {cmd="scripts/vlm.py"}
+bench = {cmd="scripts/benchmark_models.py"}
+bench_ovis = {cmd="scripts/benchmark_fps_ovis.py"}
+bench_single = {cmd="scripts/benchmark_single_frame.py"}
+vlm_VideoMME = {cmd="scripts/vlm_VideoMME.py"}
+vlm_VideoMME_evaluation = {cmd="scripts/vlm_VideoMME_evaluation.py"}
+
+
+
+[tool.pdm.dev-dependencies]
+dev = [
+    "-e git+https://github.com/salaniz/pycocoevalcap.git#egg=pycocoevalcap",
+]
+
