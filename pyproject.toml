@@ -19,6 +19,7 @@ dependencies = ["pydantic>=2.11.3",
     "dataclasses-json>=0.6.7",
     "bson>=0.5.10",
     "tqdm>=4.67.1",
+    "datasets>=2.21.0",
     "opencv-python>=4.11.0.86",
     "sentencepiece>=0.2.0",
     "einops>=0.8.1",
@@ -58,6 +59,7 @@ bench_ovis = {cmd="scripts/benchmark_fps_ovis.py"}
 bench_single = {cmd="scripts/benchmark_single_frame.py"}
 vlm_VideoMME = {cmd="scripts/vlm_VideoMME.py"}
 vlm_VideoMME_evaluation = {cmd="scripts/vlm_VideoMME_evaluation.py"}
+extract_videomme_frames = {cmd="scripts/extract_videomme_frames.py"}
 
 
 
@@ -65,4 +67,3 @@ vlm_VideoMME_evaluation = {cmd="scripts/vlm_VideoMME_evaluation.py"}
 dev = [
     "-e git+https://github.com/salaniz/pycocoevalcap.git#egg=pycocoevalcap",
 ]
-
