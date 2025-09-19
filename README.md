@@ -1,6 +1,8 @@
 # Video Frame Sampling Benchmark
 
-Open-source implementation of the experiments described in the paper ****. The project evaluates modern vision-language models under a range of frame selection strategies to understand the trade-offs between temporal coverage, inference cost, and descriptive quality.
+[![arXiv](https://img.shields.io/badge/arXiv-2509.14769-B31B1B?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2509.14769)
+
+Open-source implementation of the experiments described in the paper *Frame Sampling Strategies Matter: A Benchmark for small vision language models*. The project evaluates modern vision-language models under a range of frame selection strategies to understand the trade-offs between temporal coverage, inference cost, and descriptive quality.
 
 ## Highlights
 - Unified video backend with configurable sampling strategies (`first`, `center`, `fps`, `maxinfo`, `csta`).
