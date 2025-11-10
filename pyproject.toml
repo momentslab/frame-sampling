@@ -59,16 +59,10 @@ build-backend = "pdm.backend"
 distribution = true
 
 [tool.pdm.scripts]
-vlm = {cmd="scripts/vlm.py"}
-bench = {cmd="scripts/benchmark_models.py"}
-bench_ovis = {cmd="scripts/benchmark_fps_ovis.py"}
-bench_single = {cmd="scripts/benchmark_single_frame.py"}
+download_data = {cmd="scripts/download_data.py"}
 vlm_VideoMME = {cmd="scripts/vlm_VideoMME.py"}
-vlm_VideoMME_evaluation = {cmd="scripts/vlm_VideoMME_evaluation.py"}
-videoMMe_download = {cmd="scripts/videoMME_download.py"}
+vlm_MVBench = {cmd="scripts/vlm_MVBench.py"}
 
-
-download = {cmd="scripts/data_collection.py"}
 
 [tool.pdm.dev-dependencies]
 dev = [
