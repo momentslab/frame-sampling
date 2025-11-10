@@ -1,3 +1,17 @@
 *.pdf
 Video_MME/
 *.pptx
+
+data/
+results/
+
+scripts/check_mvbench_missing_videos.py
+scripts/extract_frame_indices.py
+
+scripts/run_all_models_mvbench.sh
+scripts/run_ovis_mvbench.sh
+scripts/run_qwen2_5_mvbench.sh
+scripts/run_smolvlm_mvbench.sh
+scripts/run_intern_mvbench.sh
+
+scripts_test/

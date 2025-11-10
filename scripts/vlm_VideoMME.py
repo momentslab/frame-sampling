@@ -4,13 +4,15 @@ import os
 from pathlib import Path
 import json
 import time
-import re
 import torch
 
 sys.path.append('src')
 
 from datasets import load_dataset
-from video_model_research.bench_utils import get_model, parse_frame_mode, cleanup_model
+from models.utils import get_model, cleanup_model
+from utils.videomme_evaluation import eval_your_results
+from utils.common_eval_utils import create_video_config, extract_answer, save_frame_indices_json
+from utils.videomme_utils import build_video_id_map, find_video_file_by_id, create_videomme_prompt
 
 
 def setup_arguments():
@@ -18,59 +20,19 @@ def setup_arguments():
     parser.add_argument("--model", type=str, required=True,
                         choices=["ovis", "smolvlm", "qwen2", "qwen2_5", "intern"],
                         help="Model to use for evaluation")
-    parser.add_argument("--video_dir", type=str, default="./Video_MME",
+    parser.add_argument("--video_dir", type=str, default="./data/VideoMME",
                         help="Directory containing Video_MME videos")
-    parser.add_argument("--mode", type=str, default="fps:1:4:96",
-                        help="Frame mode")
+    parser.add_argument("--mode", type=str, default="fps:2:4:96",
+                       help="Frame mode: 'first', 'center' | 'fps:fps:min:max' | 'maxinfo:input:max' | 'csta:input:max'")
     parser.add_argument("--max_tokens", type=int, default=10,
                         help="Max tokens to generate (multiple choice)")
+    parser.add_argument("--test", action="store_true",
+                        help="Run in test mode with limited samples (first 3 videos)")
     return parser.parse_args()
 
 
-def build_video_id_map(video_dir):
-    video_map = {}
-    video_dir = Path(video_dir)
-
-    for subdir in video_dir.iterdir():
-        if subdir.is_dir():
-            for ext in ['mp4', 'avi', 'mov', 'mkv']:
-                for file in subdir.glob(f"*.{ext}"):
-                    match = re.search(r'^(\d+)_(.+?)\.(mp4|avi|mov|mkv)$', file.name)
-                    if match:
-                        video_id = match.group(2).lower()
-                        video_map[video_id] = str(file)
-                    else:
-                        print(f"⚠️ Skipping file (no matching pattern): {file}")
-
-    return video_map
-
-
-def find_video_file_by_id(video_id, video_id_map):
-    stripped_id = video_id.strip()
-    if stripped_id in video_id_map:
-        print("✅ Found match!")
-        return video_id_map[stripped_id]
-    else:
-        raise FileNotFoundError(f"❌ Video file not found for ID: '{video_id}'")
-
-
-def create_prompt(question_data):
-    question = question_data["question"]
-    options = "\n".join(question_data["options"])
-    return (
-        "Select the best answer to the following multiple-choice question based on the video.\n"
-        "Respond with only the letter (A, B, C, or D) of the correct option.\n\n"
-        f"{question}\n{options}\n\nThe best answer is:"
-    )
-
-
 def run_model_inference(model, video_path, prompt, args):
-    frame_config = parse_frame_mode(args.mode)
-    video_items = {
-        "video": video_path,
-        "return_extra": True if args.model == "smolvlm" else False,
-        **frame_config
-    }
+    video_items = create_video_config(args.model, video_path, args.mode)
     try:
         response = model.predict(video_items=video_items, prompt=prompt, max_tokens=args.max_tokens)
         print(f"🤖 Response: {response}")
@@ -78,20 +40,6 @@ def run_model_inference(model, video_path, prompt, args):
     except Exception as e:
         print(f"❌ Error during model inference: {e}")
         return None
-
-
-def extract_answer(response):
-    if not response:
-        return None
-    response_upper = response.upper().strip()
-    for option in ['A', 'B', 'C', 'D']:
-        if response_upper.startswith(option):
-            return option
-    for option in ['A', 'B', 'C', 'D']:
-        if option in response_upper:
-            return option
-    print(f"⚠️ Could not extract valid answer from: {response}")
-    return None
 
 
 def main():
@@ -112,6 +60,7 @@ def main():
     video_id_map = build_video_id_map(args.video_dir)
     print(len(video_id_map))
 
+    # Group questions by video_id (vid) but store videoID for matching
     video_map = {}
     for example in dataset:
 
@@ -142,13 +91,19 @@ def main():
     results = []
     total_start = time.time()
 
+    # Test mode: limit to first 3 videos
+    if args.test:
+        print("\n🧪 TEST MODE: Limited to first 3 videos")
+        video_map = dict(list(video_map.items())[:3])
+
     for video_id, metadata in video_map.items():
-        print(f"\n🎬 Processing video {video_id}...")
         videoID = metadata["videoID"]
         try:
             video_path = find_video_file_by_id(videoID, video_id_map)
             video_missing = False
+            print(f"\n🎬 Processing video {video_id} | File: {Path(video_path).name}")
         except Exception as e:
+            print(f"\n🎬 Processing video {video_id}...")
             print(f"⚠️ Skipping video {video_id} due to error: {e}")
             video_missing = True
             video_path = None
@@ -162,7 +117,7 @@ def main():
         }
 
         for q in metadata["questions"]:
-            prompt = create_prompt(q)
+            prompt = create_videomme_prompt(q)
             print(f"\n🔍 Q: {q['question_id']} | {q['question']}")
             if video_missing:
                 response = None
@@ -189,13 +144,69 @@ def main():
         results.append(video_result)
         torch.cuda.empty_cache()
 
-    out_path = Path(args.video_dir) / f"results_{args.model}_{args.mode}.json"
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=4, ensure_ascii=False)
+    # Create results directory with model-specific subdirectory
+    results_dir = Path("results/VideoMME") / args.model
+    results_dir.mkdir(parents=True, exist_ok=True)
+
     cleanup_model(model)
 
-    print(f"\n✅ Done! Results saved to {out_path}")
+    print(f"\n✅ Done! Processing results...")
     print(f"⏱️ Total evaluation time: {time.time() - total_start:.2f} seconds")
+
+    # Save frame indices
+    save_frame_indices_json(benchmark_name="VideoMME", mode=args.mode, model_name=args.model)
+
+    # Evaluate results
+    print("\n" + "="*60)
+    print("📊 EVALUATING RESULTS")
+    print("="*60)
+
+    # Determine video types from results
+    video_types = list(set([item["duration"] for item in results]))
+
+    # Create figures directory
+    figures_dir = results_dir / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create temporary file path for evaluation
+    mode_filename = args.mode.replace(":", "_").replace("/", "_")
+    temp_results_path = results_dir / f"temp_{mode_filename}.json"
+    with open(temp_results_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=4, ensure_ascii=False)
+
+    eval_results = eval_your_results(
+        str(temp_results_path),
+        video_types=video_types,
+        skip_missing=args.test,  # Skip missing check in test mode
+        return_categories_accuracy=True,
+        return_sub_categories_accuracy=True,
+        return_task_types_accuracy=True,
+        save_plots=True,
+        plot_output_dir=str(figures_dir),
+        model_name=args.model,
+        return_dict=True
+    )
+
+    # Remove temporary file
+    temp_results_path.unlink()
+
+    # Create final results file with summary at the top
+    final_results = {
+        "overall_performance": eval_results.get("overall_performance", 0),
+        "video_categories": eval_results.get("video_categories", {}),
+        "video_sub_categories": eval_results.get("video_sub_categories", {}),
+        "task_categories": eval_results.get("task_categories", {}),
+        "model": args.model,
+        "mode": args.mode,
+        "detailed_results": results
+    }
+
+    # Save final results with summary at top
+    final_out_path = results_dir / f"{mode_filename}.json"
+    with open(final_out_path, "w", encoding="utf-8") as f:
+        json.dump(final_results, f, indent=2, ensure_ascii=False)
+
+    print(f"\n💾 Final results saved to: {final_out_path}")
 
 
 if __name__ == "__main__":

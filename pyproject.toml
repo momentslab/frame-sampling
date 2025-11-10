@@ -1,25 +1,25 @@
 [project]
-name = "Frame-Sampling-Study"
-version = "1.0.0"
-description = ""
+name = "video-model-research"
+version = "0.1.0"
+description = "Default template for PDM package"
 authors = [
-    {name = "Yannis Tevissen", email = "yannis.tevissen@momentslab.com"},
+    {name = "Yannis Tevissen", email = "yannis.tevissen@orange.fr"},
 ]
 dependencies = ["pydantic>=2.11.3",
     "transformers==4.51.3",
     "num2words>=0.5.14",
-    "flash-attn>=2.8.2",
     "ninja>=1.11.1.4",
     "pillow>=11.2.1",
+    #"pyav>=14.2.1; sys_platform != 'darwin'",
     "accelerate>=1.9.0",
     "av>=14.3.0",
-    "huggingface-hub>=0.31.2",
+    "huggingface-hub[cli,hf_transfer]>=0.31.2",
     "qwen-vl-utils>=0.0.11",
     "torchvision>=0.22.0",
     "dataclasses-json>=0.6.7",
+    "boto3>=1.38.19",
     "bson>=0.5.10",
     "tqdm>=4.67.1",
-    "datasets>=2.21.0",
     "opencv-python>=4.11.0.86",
     "sentencepiece>=0.2.0",
     "einops>=0.8.1",
@@ -39,7 +39,9 @@ dependencies = ["pydantic>=2.11.3",
     "packaging>=25.0",
     "torchinfo>=1.8.0",
     "deepspeed>=0.17.2",
-    "yt-dlp>=2025.7.21"]
+    "yt-dlp>=2025.7.21",
+    "flash-attn==2.7.0.post2",
+    "loguru>=0.7.3"]
 requires-python = ">=3.10,<3.13"
 readme = "README.md"
 license = {text = "MIT"}
@@ -47,6 +49,10 @@ license = {text = "MIT"}
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
+
+# NOTE: flash-attn==2.7.0.post2 is pinned to work with PyTorch 2.9.0+cu128
+# If you encounter "undefined symbol: _ZNK3c106SymInt6sym_neERKS0_" error,
+# rebuild flash-attn with: pdm remove flash-attn && pdm add "flash-attn==2.7.0.post2" --no-isolation
 
 
 [tool.pdm]
@@ -59,11 +65,14 @@ bench_ovis = {cmd="scripts/benchmark_fps_ovis.py"}
 bench_single = {cmd="scripts/benchmark_single_frame.py"}
 vlm_VideoMME = {cmd="scripts/vlm_VideoMME.py"}
 vlm_VideoMME_evaluation = {cmd="scripts/vlm_VideoMME_evaluation.py"}
-extract_videomme_frames = {cmd="scripts/extract_videomme_frames.py"}
+videoMMe_download = {cmd="scripts/videoMME_download.py"}
 
 
+download = {cmd="scripts/data_collection.py"}
 
 [tool.pdm.dev-dependencies]
 dev = [
     "-e git+https://github.com/salaniz/pycocoevalcap.git#egg=pycocoevalcap",
 ]
+
+
