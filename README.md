@@ -7,8 +7,6 @@ Open-source implementation of the experiments described in the paper *Frame Samp
 ## Highlights
 - Unified video backend with configurable sampling strategies (`first`, `center`, `fps`, `maxinfo`, `csta`).
 - Ready-to-run wrappers for multi-modal models such as SmolVLM, Qwen2, Qwen2.5, InternVL, and Ovis.
-- Benchmarking utilities that compute BLEU, ROUGE, METEOR, CIDEr, and BERTScore, plus optional Video-MME evaluation helpers.
-- Scripts for model-to-model comparisons, FPS sensitivity analysis, and single-frame baselines.
 
 ## Installation
 
@@ -36,66 +34,48 @@ The dependency list is defined in `pyproject.toml`. PDM is recommended as it pro
 ### Using PDM scripts (Recommended)
 If you installed with PDM, you can use the convenient scripts defined in `pyproject.toml`:
 
+#### Download Datasets
 ```bash
-# Benchmark multiple models
-pdm run bench \
-  --folder_path /path/to/videos \
-  --output_path ./outputs/model_comparison \
-  --mode fps:1:4:96 \
-  --prompt "Give a short description of the video:"
+# Download Video-MME dataset (~101 GB)
+pdm run download_data VideoMME
 
-# Quick inference helper
-pdm run vlm \
-  --model_name ovis \
-  --video_path /path/to/video.mp4 \
-  --mode maxinfo:1000:96
-
-# Single-frame baselines
-pdm run bench_single \
-  --folder_path /path/to/videos \
-  --output_path ./outputs/single_frame
-
-# Video-MME evaluation
-pdm run vlm_VideoMME
-pdm run vlm_VideoMME_evaluation
+# Download MVBench dataset
+pdm run download_data MVBench
 ```
 
-### Direct script execution
-You can also run the scripts directly:
-
+#### Run Video-MME Evaluation
 ```bash
-# Benchmark multiple models
-python scripts/benchmark_models.py \
-  --folder_path /path/to/videos \
-  --output_path ./outputs/model_comparison \
-  --mode fps:1:4:96 \
-  --prompt "Give a short description of the video:"
+# Basic evaluation with OVIS model (default mode: fps:2:4:96)
+pdm run vlm_VideoMME --model ovis --video_dir ./data/VideoMME/data
 
-# Sweep FPS settings for a single model
-python scripts/benchmark_fps_model.py \
-  --model qwen2_5 \
-  --folder_path /path/to/videos \
-  --output_path ./outputs/qwen2_5_fps \
-  --fps_configs 0.25,0.5,1,2,3
+# Test mode (limited samples)
+pdm run vlm_VideoMME --model ovis --video_dir ./data/VideoMME/data --test
 
-# Single-frame baselines
-python scripts/benchmark_single_frame.py \
-  --folder_path /path/to/videos \
-  --output_path ./outputs/single_frame
-
-# Quick inference helper
-python scripts/vlm.py \
-  --model_name ovis \
-  --video_path /path/to/video.mp4 \
-  --mode maxinfo:1000:96
+# Custom model and frame sampling
+pdm run vlm_VideoMME --model qwen2_5 --mode fps:1:4:96 --video_dir /path/to/videos
 ```
 
-### Video-MME evaluation
-The folder `Video_MME/` contains helpers for reproducing the Video-MME leaderboard submission. Use `VideoMME_results.txt` together with `scripts/vlm_VideoMME.py` and `scripts/vlm_VideoMME_evaluation.py` to regenerate predictions and compute category-wise accuracies.
+#### Run MVBench Evaluation
+```bash
+# Basic evaluation (default mode: fps:2:4:96)
+pdm run vlm_MVBench --model ovis --data_dir ./data/MVBench
 
-## Repository Layout
-- `src/video_model_research/`: Core library code (frame sampling, model wrappers, metrics, and utilities).
-- `scripts/`: Command-line entry points used in the ICASSP experiments.
+# Test mode with custom output
+pdm run vlm_MVBench --model smolvlm --test --output_dir ./results/test_run
+
+# Different frame sampling strategies
+pdm run vlm_MVBench --model intern --mode maxinfo:1000:96 --data_dir /path/to/mvbench
+```
+
+
+#### Available Options
+- **Models**: `ovis`, `smolvlm`, `qwen2`, `qwen2_5`, `intern`
+- **Frame modes**: 
+  - Single frame: `first`, `center`
+  - Multi-frame: `fps:rate:min:max` (e.g., `fps:2:4:96`)
+  - Max info: `maxinfo:input:max` (e.g., `maxinfo:1000:96`)
+  - CSTA: `csta:input:max` (e.g., `csta:1000:96`)
+- **Other options**: `--test`, `--video_dir`/`--data_dir`, `--output_dir`
 
 ## Citation
 If you use this repository in academic work, please cite 
