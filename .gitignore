@@ -15,5 +15,8 @@ scripts/run_smolvlm_mvbench.sh
 scripts/run_intern_mvbench.sh
 
 scripts_test/
+.pdm-python
 
 .vscode/
+*.pyc
+__pycache__/

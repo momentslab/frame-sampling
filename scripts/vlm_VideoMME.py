@@ -164,12 +164,12 @@ def main():
     # Determine video types from results
     video_types = list(set([item["duration"] for item in results]))
 
-    # Create figures directory
-    figures_dir = results_dir / "figures"
+    # Create figures directory with mode-specific name
+    mode_filename = args.mode.replace(":", "_").replace("/", "_")
+    figures_dir = results_dir / "figures" / mode_filename
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     # Create temporary file path for evaluation
-    mode_filename = args.mode.replace(":", "_").replace("/", "_")
     temp_results_path = results_dir / f"temp_{mode_filename}.json"
     with open(temp_results_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=4, ensure_ascii=False)

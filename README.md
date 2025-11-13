@@ -78,4 +78,14 @@ pdm run vlm_MVBench --model intern --mode maxinfo:1000:96 --data_dir /path/to/mv
 - **Other options**: `--test`, `--video_dir`/`--data_dir`, `--output_dir`
 
 ## Citation
-If you use this repository in academic work, please cite 
+
+If you use this repository in academic work, please cite:
+
+```bibtex
+@article{brkic2025frame,
+  title={Frame Sampling Strategies Matter: A Benchmark for small vision language models},
+  author={Brkic, Marija and Razzouki, Anas Filali and Tevissen, Yannis and Guetari, Khalil and Yacoubi, Mounim A El},
+  journal={arXiv preprint arXiv:2509.14769},
+  year={2025}
+}
+```
