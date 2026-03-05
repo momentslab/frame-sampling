@@ -92,8 +92,59 @@ def parse_frame_mode(mode):
         except (ValueError, IndexError):
             raise ValueError(f"Invalid csta format: {mode}. Use 'csta:input:max' (e.g., 'csta:1000:96')")
 
+    # UFP mode: ufp:N — uniformly sample exactly N frames from the full video
+    elif mode.startswith("ufp:"):
+        try:
+            parts = mode.split(":")
+            if len(parts) == 2 and parts[0] == "ufp":
+                n = int(parts[1])
+                logger.info(f"🎞️  UFP mode: uniform {n} frames")
+                config.update({
+                    "selection_method": "uniform",
+                    "num_frames": n,
+                })
+                return config
+            else:
+                raise ValueError("Invalid format")
+        except (ValueError, IndexError):
+            raise ValueError(f"Invalid ufp format: {mode}. Use 'ufp:N' (e.g., 'ufp:8')")
+
+    # Clips mode: clips:frames_per_clip:max_clips:target_fps[:clip_sampling_ratio]
+    # Example: clips:8:32:1.0  or  clips:8:32:1.0:1.0
+    elif mode.startswith("clips:"):
+        try:
+            parts = mode.split(":")
+            if len(parts) in (4, 5) and parts[0] == "clips":
+                frames_per_clip = int(parts[1])
+                max_clips = int(parts[2])
+                target_fps = float(parts[3])
+                clip_sampling_ratio = float(parts[4]) if len(parts) == 5 else 1.0
+                logger.info(
+                    f"🎬 Clips mode: frames_per_clip={frames_per_clip}, "
+                    f"max_clips={max_clips}, target_fps={target_fps}, "
+                    f"clip_sampling_ratio={clip_sampling_ratio}"
+                )
+                config.update({
+                    "selection_method": "clips",
+                    "frames_per_clip": frames_per_clip,
+                    "max_clips_per_video": max_clips,
+                    "target_fps": target_fps,
+                    "clip_sampling_ratio": clip_sampling_ratio,
+                })
+                return config
+            else:
+                raise ValueError("Invalid format")
+        except (ValueError, IndexError):
+            raise ValueError(
+                f"Invalid clips format: {mode}. "
+                "Use 'clips:frames_per_clip:max_clips:target_fps' (e.g., 'clips:8:32:1.0')"
+            )
+
     else:
-        raise ValueError(f"Unknown mode: {mode}. Use 'first', 'center', 'fps:N:min:max', 'maxinfo:input:max', or 'csta:input:max'")
+        raise ValueError(
+            f"Unknown mode: {mode}. Use 'first', 'center', 'fps:N:min:max', "
+            "'maxinfo:input:max', 'csta:input:max', 'ufp:N', or 'clips:fpc:max_clips:fps'"
+        )
 
 
 def cleanup_memory():

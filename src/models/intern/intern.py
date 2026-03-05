@@ -2,6 +2,7 @@ from models.ai_models import VideoModel
 from transformers import AutoModel, AutoTokenizer
 import torch
 import os
+import warnings
 from models.intern.utils import load_video
 
 class Intern(VideoModel):
@@ -10,8 +11,11 @@ class Intern(VideoModel):
     def __init__(self):
         model_path = "OpenGVLab/InternVL3-2B"
 
-        # Set device config
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "mps")
+        # When running under torchrun each rank owns one GPU (LOCAL_RANK).
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+
+        # Set device config — pinned to this rank's GPU
+        self.device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "mps")
 
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
@@ -22,15 +26,20 @@ class Intern(VideoModel):
             torch.cuda.set_per_process_memory_fraction(0.9)
             os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-            # Load model with FlashAttention2 and multi-GPU support
-            self.model = AutoModel.from_pretrained(
-                model_path,
-                torch_dtype=torch.bfloat16,
-                trust_remote_code=True,
-                low_cpu_mem_usage=True,
-                _attn_implementation="flash_attention_2",  # IMPORTANT
-                device_map="balanced" if torch.cuda.device_count() > 1 else "auto"
-            )
+            # Load to CPU first, then move to the rank's GPU.
+            # InternVL3's custom model class leaves _tp_plan=None which causes
+            # transformers' caching_allocator_warmup to crash when device_map is set.
+            # The "not initialized on GPU" warning from flash_attention_2 is expected —
+            # the model IS moved to GPU immediately after via .to(self.device).
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=".*not initialized on GPU.*")
+                self.model = AutoModel.from_pretrained(
+                    model_path,
+                    torch_dtype=torch.bfloat16,
+                    trust_remote_code=True,
+                    low_cpu_mem_usage=True,
+                    _attn_implementation="flash_attention_2",
+                ).to(self.device)
         else:
             # Fallback for MPS or CPU
             self.model = AutoModel.from_pretrained(
@@ -51,14 +60,14 @@ class Intern(VideoModel):
         video_prefix = ''.join([f'Frame{i+1}: <image>\n' for i in range(len(num_patches_list))])
         question = video_prefix + prompt
 
-        response, history = self.model.chat(
+        response = self.model.chat(
             self.tokenizer,
             pixel_values,
             question,
             generation_config,
             num_patches_list=num_patches_list,
             history=None,
-            return_history=True
+            return_history=False,
         )
 
         return response

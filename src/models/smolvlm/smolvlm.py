@@ -41,14 +41,17 @@ class SmolVLM(VideoModel):
             # Enable flash attention and memory optimizations
             torch.backends.cuda.enable_flash_sdp(True)
             torch.cuda.set_per_process_memory_fraction(0.9)
-            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-            
-            # Load model with multi-GPU support if available
+
+            # When running under torchrun each rank owns one GPU (LOCAL_RANK).
+            # Use that specific device so ranks don't fight over device_map placement.
+            local_rank = int(os.environ.get("LOCAL_RANK", 0))
+            device_map = f"cuda:{local_rank}"
+
             self.model = AutoModelForImageTextToText.from_pretrained(
                 model_path,
                 torch_dtype=torch.bfloat16,
                 _attn_implementation="flash_attention_2",
-                device_map="balanced" if torch.cuda.device_count() > 1 else "auto"
+                device_map=device_map,
             )
         else:
             # MPS fallback

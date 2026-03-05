@@ -66,7 +66,6 @@ def find_video_file_by_id(video_id: str, video_id_map: Dict[str, str]) -> str:
     """
     stripped_id = video_id.strip()
     if stripped_id in video_id_map:
-        print("✅ Found match!")
         return video_id_map[stripped_id]
     else:
         raise FileNotFoundError(f"❌ Video file not found for ID: '{video_id}'")

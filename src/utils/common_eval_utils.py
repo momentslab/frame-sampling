@@ -8,12 +8,13 @@ prompt creation, answer extraction, and video configuration.
 from typing import Dict, Any, Optional
 import json
 from pathlib import Path
+from tqdm import tqdm
 from models.utils import parse_frame_mode
 from video_manager.global_video_info import video_info_cache
 
 
 # Supported models
-SUPPORTED_MODELS = ["ovis", "smolvlm", "qwen2", "qwen2_5", "intern"]
+SUPPORTED_MODELS = ["ovis", "smolvlm", "qwen2", "qwen2_5", "intern", "apollo"]
 
 # Answer options
 ANSWER_OPTIONS = ['A', 'B', 'C', 'D']
@@ -67,7 +68,7 @@ def extract_answer(response: Optional[str]) -> Optional[str]:
         if option in response_upper:
             return option
     
-    print(f"⚠️ Could not extract valid answer from: {response}")
+    tqdm.write(f"⚠️  Could not extract valid answer from: {response}")
     return None
 
 
