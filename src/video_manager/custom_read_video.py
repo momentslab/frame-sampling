@@ -217,7 +217,6 @@ def _get_uniform_frame_indices(ele, total_frames):
     """
     n = min(int(ele.get("num_frames", 8)), total_frames)
     frame_indices = torch.linspace(0, total_frames - 1, n).round().long().tolist()
-    print("uniform here: ", n)
     return frame_indices, n
 
 
@@ -374,7 +373,7 @@ def _cache_video_info(video_path, video_fps, total_frames, num_frames, frame_ind
         "Video_fps": int(video_fps),
         "Total_frames": total_frames,
         "Nframes": num_frames,
-        "Indices": str(frame_indices)
+        "Indices": list(frame_indices)
     }
 
 

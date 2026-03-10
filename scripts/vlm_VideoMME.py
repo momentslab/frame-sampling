@@ -3,6 +3,7 @@ import sys
 import os
 import time
 import json
+import traceback
 from pathlib import Path
 
 import torch
@@ -35,7 +36,7 @@ IS_MAIN = (RANK == 0)
 def setup_arguments():
     parser = argparse.ArgumentParser(description="Evaluate VLMs on VideoMME (multi-GPU via torchrun).")
     parser.add_argument("--model", type=str, required=True,
-                        choices=["ovis", "smolvlm", "qwen2", "qwen2_5", "intern", "apollo"])
+                        choices=["ovis", "smolvlm", "qwen2", "qwen2_5", "qwen3", "intern", "apollo"])
     parser.add_argument("--model_path", type=str, default=None,
                         help="Optional path to model weights (e.g. for Apollo local checkpoint).")
     parser.add_argument("--video_dir", type=str, default="./data/VideoMME")
@@ -70,11 +71,24 @@ def build_flat_questions(dataset):
 
 
 # ── Inference ─────────────────────────────────────────────────────────────────
-def run_model_inference(model, video_path, prompt, args):
+def run_model_inference(model, video_path, prompt, args, question_id=None, video_id=None):
     video_items = create_video_config(args.model, video_path, args.mode)
     try:
         return model.predict(video_items=video_items, prompt=prompt, max_tokens=args.max_tokens)
-    except Exception:
+    except Exception as exc:
+        item_parts = []
+        if question_id is not None:
+            item_parts.append(f"question_id={question_id}")
+        if video_id is not None:
+            item_parts.append(f"video_id={video_id}")
+        item_desc = ", ".join(item_parts) or "unknown item"
+        print(
+            f"[rank {RANK}] ❌ Inference failed for {item_desc} "
+            f"model={args.model} mode={args.mode} path={video_path}: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+        traceback.print_exc()
         return None
 
 
@@ -198,7 +212,14 @@ def main():
         if video_path is None:
             response, predicted, correct = None, None, False
         else:
-            response  = run_model_inference(model, video_path, prompt, args)
+            response  = run_model_inference(
+                model,
+                video_path,
+                prompt,
+                args,
+                question_id=item["question_id"],
+                video_id=item["video_id"],
+            )
             predicted = extract_answer(response)
             correct   = (predicted == item["answer"])
 
@@ -243,7 +264,7 @@ def main():
 
         save_frame_indices_json(benchmark_name="VideoMME", mode=args.mode, model_name=args.model)
 
-        video_types  = list(set(item["duration"] for item in results))
+        video_types = [duration for duration in ["short", "medium", "long"] if any(item["duration"] == duration for item in results)]
         figures_dir  = results_dir / "figures" / mode_filename
         figures_dir.mkdir(parents=True, exist_ok=True)
 
@@ -269,6 +290,7 @@ def main():
         total_elapsed = time.time() - total_start
         final_results = {
             "overall_performance": eval_results.get("overall_performance", 0),
+            "video_durations":     eval_results.get("video_durations",     {}),
             "video_categories":    eval_results.get("video_categories",    {}),
             "video_sub_categories":eval_results.get("video_sub_categories",{}),
             "task_categories":     eval_results.get("task_categories",     {}),

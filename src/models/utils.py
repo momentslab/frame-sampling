@@ -14,6 +14,8 @@ from .qwen2_5.qwen2_5 import Qwen2_5
 from .qwen2.qwen2 import Qwen2
 from .intern.intern import Intern
 from .ovis.ovis import Ovis
+from .apollo.apollo import Apollo
+#from .qwen3.qwen3 import Qwen3
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -119,11 +121,6 @@ def parse_frame_mode(mode):
                 max_clips = int(parts[2])
                 target_fps = float(parts[3])
                 clip_sampling_ratio = float(parts[4]) if len(parts) == 5 else 1.0
-                logger.info(
-                    f"🎬 Clips mode: frames_per_clip={frames_per_clip}, "
-                    f"max_clips={max_clips}, target_fps={target_fps}, "
-                    f"clip_sampling_ratio={clip_sampling_ratio}"
-                )
                 config.update({
                     "selection_method": "clips",
                     "frames_per_clip": frames_per_clip,
@@ -155,7 +152,7 @@ def cleanup_memory():
         torch.cuda.synchronize()
 
 
-def get_model(model_name: str):
+def get_model(model_name: str, **kwargs):
     """Load and return the specified model with proper error handling."""
     logger.info(f"Loading {model_name} model...")
     start_load = time.time()
@@ -170,10 +167,14 @@ def get_model(model_name: str):
             model = Qwen2()
         elif model_name == "qwen2_5":
             model = Qwen2_5()
+        elif model_name == "qwen3":
+            model = Qwen3(**kwargs)
         elif model_name == "intern":
             model = Intern()
         elif model_name == "ovis":
             model = Ovis()
+        elif model_name == "apollo":
+            model = Apollo(**kwargs)
         else:
             raise ValueError(f"Unknown model name: {model_name}")
         

@@ -149,12 +149,14 @@ def save_frame_indices_json(output_dir: str = "./frame_indices", benchmark_name:
     frames_data = {}
 
     for video_path, info in video_info_cache.items():
-        # Parse the indices string to a list
-        indices_str = info.get('Indices', '[]')
-        try:
-            indices = eval(indices_str)
-        except:
-            indices = []
+        indices_value = info.get('Indices', [])
+        if isinstance(indices_value, list):
+            indices = indices_value
+        else:
+            try:
+                indices = eval(indices_value)
+            except Exception:
+                indices = []
 
         frames_data[video_path] = {
             "frames": indices,
