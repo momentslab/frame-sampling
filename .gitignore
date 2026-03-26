@@ -27,7 +27,4 @@ results_cp_1/
 results_backup/
 frame_indices/
 scripts/runs/
-src/models/apollo
-src/models/qwen3
-src/models/qwen3_5
 
