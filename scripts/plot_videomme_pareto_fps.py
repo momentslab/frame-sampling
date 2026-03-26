@@ -13,12 +13,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-MODELS = ["intern", "smolvlm", "qwen2_5", "ovis", "ours"]
+MODELS = ["intern", "smolvlm", "qwen2_5", "ovis"]
 MODEL_LABELS = {
-    "intern": "InternVL",
-    "smolvlm": "SmolVLM",
+    "intern": "InternVL3",
+    "smolvlm": "SmolVLM2",
     "qwen2_5": "Qwen2.5",
-    "ovis": "Ovis",
+    "ovis": "Ovis2",
     "ours": "Ours",
 }
 MODEL_MARKERS = {
@@ -35,44 +35,12 @@ METRICS = {
     "medium": "Medium",
     "long": "Long",
 }
-CONFIG_ORDER = [
-    "center",
-    "clips_8_1_2",
-    "clips_16_1_2",
-    "clips_16_2_2",
-    "clips_16_4_2",
-    "clips_16_8_2",
-    "clips_16_16_2",
-]
-CONFIG_LABELS = {
-    "center": "center",
-    "clips_8_1_2": "8x1@2",
-    "clips_16_1_2": "16x1@2",
-    "clips_16_2_2": "16x2@2",
-    "clips_16_4_2": "16x4@2",
-    "clips_16_8_2": "16x8@2",
-    "clips_16_16_2": "16x16@2",
-}
-CONFIG_AXIS_LABELS = {
-    "center": "center\n1 frame",
-    "clips_8_1_2": "8f / 1c\n8 total",
-    "clips_16_1_2": "16f / 1c\n16 total",
-    "clips_16_2_2": "16f / 2c\n32 total",
-    "clips_16_4_2": "16f / 4c\n64 total",
-    "clips_16_8_2": "16f / 8c\n128 total",
-    "clips_16_16_2": "16f / 16c\n256 total",
-}
+
+# FPS configurations: fps:2:4:N_max where N_max varies, plus center frame (1 frame)
+FPS_N_MAX_VALUES = [1,8, 16, 48, 96, 144, 240]  # 1 represents center frame
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
-OURS_EVAL_DIRS = {
-    "clips_8_1_2": REPO_ROOT / "outputs" / "stage3-siglip-perceiver-256" / "eval_results" / "outputs_8f_1clips_stage3-siglip-perceiver-256",
-    "clips_16_1_2": REPO_ROOT / "outputs" / "stage3-siglip-perceiver-256" / "eval_results" / "outputs_16f_1clips_stage3-siglip-perceiver-256",
-    "clips_16_2_2": REPO_ROOT / "outputs" / "stage3-siglip-perceiver-256" / "eval_results" / "outputs_16f_2clips_stage3-siglip-perceiver-256",
-    "clips_16_4_2": REPO_ROOT / "outputs" / "stage3-siglip-perceiver-256" / "eval_results" / "outputs_16f_4clips_stage3-siglip-perceiver-256",
-    "clips_16_8_2": REPO_ROOT / "outputs" / "stage3-siglip-perceiver-256" / "eval_results" / "outputs_16f_8clips_stage3-siglip-perceiver-256",
-    "clips_16_16_2": REPO_ROOT / "outputs" / "stage3-siglip-perceiver-256" / "eval_results" / "outputs_16f_16clips_stage3-siglip-perceiver-256",
-}
 
 
 def compute_accuracy(correct: int, answered: int) -> float:
@@ -140,37 +108,9 @@ def compute_metrics_from_detailed_results(detailed_results: list[dict]) -> dict[
     }
 
 
-def find_single_file(directory: Path, pattern: str) -> Path:
-    matches = sorted(directory.rglob(pattern))
-    if not matches:
-        raise FileNotFoundError(f"Could not find {pattern} under {directory}")
-    return matches[-1]
-
-
-def compute_duration_metrics_from_samples(samples_path: Path) -> dict[str, float]:
-    stats = {duration: {"correct": 0, "answered": 0} for duration in DURATION_ORDER}
-
-    with samples_path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            record = json.loads(line)
-            score = record.get("videomme_perception_score", {})
-            duration = score.get("duration")
-            if duration not in stats:
-                continue
-            stats[duration]["answered"] += 1
-            stats[duration]["correct"] += int(score.get("pred_answer") == score.get("answer"))
-
-    return {duration: round(compute_accuracy(values["correct"], values["answered"]), 2) for duration, values in stats.items()}
-
-
 def enrich_result_json(result_path: Path) -> dict:
     data = json.loads(result_path.read_text())
     changed = False
-    model_name = result_path.parent.name
-    config_name = result_path.stem
 
     if "detailed_results" in data:
         recomputed_metrics = compute_metrics_from_detailed_results(data["detailed_results"])
@@ -193,18 +133,6 @@ def enrich_result_json(result_path: Path) -> dict:
             time_seconds = float(total_time)
             data["inference_time_seconds"] = round(time_seconds, 1)
             data["inference_time_minutes"] = round(time_seconds / 60.0, 2)
-            changed = True
-
-    if "video_durations" not in data:
-        durations = None
-        if model_name == "ours":
-            eval_dir = OURS_EVAL_DIRS.get(config_name)
-            if eval_dir and eval_dir.exists():
-                samples_path = find_single_file(eval_dir, "*_samples_videomme.jsonl")
-                durations = compute_duration_metrics_from_samples(samples_path)
-                data["source_samples_videomme"] = str(samples_path)
-        if durations is not None:
-            data["video_durations"] = durations
             changed = True
 
     if changed:
@@ -232,23 +160,35 @@ def collect_points(results_dir: Path, metric_name: str) -> tuple[dict[str, list[
 
     for model in MODELS:
         points: list[dict] = []
-        for config in CONFIG_ORDER:
-            result_path = results_dir / model / f"{config}.json"
+        for n_max in FPS_N_MAX_VALUES:
+            # Special case: n_max=1 means center frame
+            if n_max == 1:
+                config_name = "center"
+            else:
+                config_name = f"fps_2_4_{n_max}"
+
+            result_path = results_dir / model / f"{config_name}.json"
             if not result_path.exists():
-                break
-            accuracy, time_seconds = extract_metrics(result_path, metric_name)
-            point = {
-                "model": model,
-                "config": config,
-                "config_label": CONFIG_LABELS[config],
-                "metric": metric_name,
-                "accuracy": accuracy,
-                "time_seconds": time_seconds,
-                "time_minutes": time_seconds / 60.0,
-            }
-            points.append(point)
-            rows.append(point)
-        series[model] = points
+                # Skip if file doesn't exist for this model
+                continue
+            try:
+                accuracy, time_seconds = extract_metrics(result_path, metric_name)
+                point = {
+                    "model": model,
+                    "n_max": n_max,
+                    "config": config_name,
+                    "metric": metric_name,
+                    "accuracy": accuracy,
+                    "time_seconds": time_seconds,
+                    "time_minutes": time_seconds / 60.0,
+                }
+                points.append(point)
+                rows.append(point)
+            except (FileNotFoundError, ValueError):
+                # Skip if we can't extract metrics
+                continue
+        if points:
+            series[model] = points
 
     return series, rows
 
@@ -257,30 +197,35 @@ def write_summary_csv(rows: list[dict], output_path: Path) -> None:
     with output_path.open("w", newline="") as handle:
         writer = csv.DictWriter(
             handle,
-            fieldnames=["metric", "model", "config", "config_label", "accuracy", "time_seconds", "time_minutes"],
+            fieldnames=["metric", "model", "n_max", "config", "accuracy", "time_seconds", "time_minutes"],
             extrasaction="ignore",
         )
         writer.writeheader()
         writer.writerows(rows)
 
 
-def attach_within_group_x_positions(series: dict[str, list[dict]]) -> None:
-    base_positions = {config: idx for idx, config in enumerate(CONFIG_ORDER)}
+def attach_within_group_x_positions_fps(series: dict[str, list[dict]]) -> None:
+    """Attach x_position to each point based on inference time within each N_max group."""
+    # Get all N_max values that exist in the data
+    all_n_max = sorted(set(point["n_max"] for points in series.values() for point in points))
+    base_positions = {n_max: idx for idx, n_max in enumerate(all_n_max)}
     max_offset = 0.30
 
-    grouped_points: dict[str, list[dict]] = {config: [] for config in CONFIG_ORDER}
+    # Group points by N_max
+    grouped_points: dict[int, list[dict]] = {n_max: [] for n_max in all_n_max}
     for points in series.values():
         for point in points:
-            grouped_points[point["config"]].append(point)
+            grouped_points[point["n_max"]].append(point)
 
-    for config, points in grouped_points.items():
+    # Assign x_position within each group based on inference time
+    for n_max, points in grouped_points.items():
         if not points:
             continue
 
         times = [point["time_seconds"] for point in points]
         min_time = min(times)
         max_time = max(times)
-        center_x = base_positions[config]
+        center_x = base_positions[n_max]
 
         for point in points:
             if max_time == min_time:
@@ -291,8 +236,8 @@ def attach_within_group_x_positions(series: dict[str, list[dict]]) -> None:
             point["x_position"] = center_x - max_offset + normalized * (2 * max_offset)
 
 
-def plot_pareto(series: dict[str, list[dict]], output_path: Path, metric_name: str) -> None:
-    attach_within_group_x_positions(series)
+def plot_pareto_fps(series: dict[str, list[dict]], output_path: Path, metric_name: str) -> None:
+    attach_within_group_x_positions_fps(series)
 
     fig, ax = plt.subplots(figsize=(13, 7))
     colors = plt.get_cmap("tab10").colors
@@ -319,14 +264,27 @@ def plot_pareto(series: dict[str, list[dict]], output_path: Path, metric_name: s
                 zorder=4,
             )
 
-    ax.set_title(f"VideoMME {METRICS[metric_name].lower()} accuracy with within-group inference-time placement")
-    ax.set_xlabel("Frame / clip configuration")
+    ax.set_title(f"VideoMME {METRICS[metric_name].lower()} accuracy with uniform sampling (FPS:2:4:$N_{{max}}$)")
+    ax.set_xlabel("$N_{max}$ (frames)")
     ax.set_ylabel("Accuracy (%)")
-    ax.set_xticks(range(len(CONFIG_ORDER)))
-    ax.set_xticklabels([CONFIG_AXIS_LABELS[config] for config in CONFIG_ORDER])
-    ax.set_xlim(-0.5, len(CONFIG_ORDER) - 0.5)
-    for separator in range(len(CONFIG_ORDER) - 1):
+
+    # Set x-axis to show only the N_max values that exist in the data
+    all_n_max = sorted(set(point["n_max"] for points in series.values() for point in points))
+    ax.set_xticks(range(len(all_n_max)))
+    # Create labels: "1 (center frame)" for n_max=1, otherwise just the number
+    x_labels = []
+    for n in all_n_max:
+        if n == 1:
+            x_labels.append("1\n(center frame)")
+        else:
+            x_labels.append(str(n))
+    ax.set_xticklabels(x_labels)
+    ax.set_xlim(-0.5, len(all_n_max) - 0.5)
+
+    # Add vertical separators between N_max groups
+    for separator in range(len(all_n_max) - 1):
         ax.axvline(separator + 0.5, color="0.68", linestyle="--", linewidth=1.0, zorder=1)
+
     all_accuracies = [point["accuracy"] for points in series.values() for point in points]
     if all_accuracies:
         y_min = min(all_accuracies) - 2.0
@@ -335,18 +293,9 @@ def plot_pareto(series: dict[str, list[dict]], output_path: Path, metric_name: s
         tick_start = math.floor(y_min / 2.0) * 2
         tick_end = math.ceil(y_max / 2.0) * 2
         ax.set_yticks(range(int(tick_start), int(tick_end) + 1, 2))
+
     ax.grid(True, alpha=0.3)
-    ax.text(
-        0.01,
-        0.98,
-        "Within each total-frame group:\nleft = faster, right = slower\nspacing is normalized per group",
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=10,
-        bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.85, "edgecolor": "0.8"},
-    )
-    ax.legend(title="Model", loc="upper left", bbox_to_anchor=(0.0, 0.88))
+    ax.legend(title="Model", loc="best")
     fig.tight_layout()
     fig.savefig(output_path, dpi=220)
     plt.close(fig)
@@ -355,7 +304,7 @@ def plot_pareto(series: dict[str, list[dict]], output_path: Path, metric_name: s
 def main() -> None:
     default_results_dir = SCRIPT_DIR.parent / "results" / "VideoMME"
 
-    parser = argparse.ArgumentParser(description="Plot VideoMME inference-time vs accuracy curves.")
+    parser = argparse.ArgumentParser(description="Plot VideoMME fps:2:4:N_max accuracy vs N_max curves.")
     parser.add_argument("--results-dir", type=Path, default=default_results_dir)
     parser.add_argument("--output-dir", type=Path, default=default_results_dir / "figures")
     args = parser.parse_args()
@@ -363,16 +312,20 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for metric_name in METRICS:
         series, rows = collect_points(args.results_dir, metric_name)
-        plot_path = args.output_dir / f"videomme_pareto_{metric_name}_accuracy_vs_time.png"
-        csv_path = args.output_dir / f"videomme_pareto_{metric_name}_accuracy_vs_time.csv"
-        plot_pareto(series, plot_path, metric_name)
+        plot_path = args.output_dir / f"videomme_pareto_fps_{metric_name}_accuracy_vs_nmax.png"
+        csv_path = args.output_dir / f"videomme_pareto_fps_{metric_name}_accuracy_vs_nmax.csv"
+        plot_pareto_fps(series, plot_path, metric_name)
         write_summary_csv(rows, csv_path)
         print(f"Saved plot: {plot_path}")
         print(f"Saved summary: {csv_path}")
         for model in MODELS:
-            configs = ", ".join(point["config"] for point in series.get(model, [])) or "<none>"
-            print(f"[{metric_name}] {model}: {configs}")
+            if model in series:
+                n_max_values = ", ".join(str(point["n_max"]) for point in series[model])
+                print(f"[{metric_name}] {model}: {n_max_values}")
+            else:
+                print(f"[{metric_name}] {model}: <none>")
 
 
 if __name__ == "__main__":
     main()
+

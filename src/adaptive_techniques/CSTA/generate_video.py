@@ -26,20 +26,17 @@ def pick_frames(video_path, selections):
     frames = []
     n_frames = 0
 
-    with tqdm(total = len(selections), ncols=90, desc = "selecting frames", unit='frame', leave = False) as pbar:
-        while True:
-            ret, frame = cap.read()
+    while True:
+        ret, frame = cap.read()
 
-            if not ret:
-                break
-            
-            if selections[n_frames]:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frames.append(frame)
-            n_frames += 1
+        if not ret:
+            break
 
-            pbar.update(1)
-        
+        if selections[n_frames]:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frames.append(frame)
+        n_frames += 1
+
     cap.release()
 
     return frames

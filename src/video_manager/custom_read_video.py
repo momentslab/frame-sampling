@@ -313,9 +313,6 @@ def _get_clip_frame_indices(ele, total_frames, video_fps):
 def _get_multi_frame_indices_maxinfo(decoder, total_frames, max_frames=96, max_input_frames=1000):
     """Get indices for multi-frame extraction using MaxInfo algorithm."""
     # Use ALL frames for maxinfo algorithm (up to max_input_frames limit)
-    start = time.time()
-
-
     # Extract all frames safely using batch processing
     all_frames, initial_indices = call_frames(decoder, total_frames, max_frames=max_input_frames)
 
@@ -329,9 +326,6 @@ def _get_multi_frame_indices_maxinfo(decoder, total_frames, max_frames=96, max_i
     )
 
     final_indices = [initial_indices[i] for i in sorted(selected_indices)]
-    end = time.time()
-
-    print(f"Execution time: {end - start:.4f} seconds")
 
     return final_indices, len(final_indices)
 
@@ -361,9 +355,6 @@ def _get_multi_frame_indices_csta(decoder, total_frames, video_fps, max_frames=9
         indices = np.linspace(0, len(final_indices) - 1, num=max_frames, dtype=int).tolist()
         final_indices = [final_indices[i] for i in indices]
 
-    end = time.time()
-
-    print(f"Execution time: {end - start:.4f} seconds")
     return final_indices, len(final_indices)
 
 

@@ -35,7 +35,6 @@ def parse_frame_mode(mode):
 
     # Single frame modes
     if mode in ["first", "center"]:
-        logger.info(f"🖼️  Single frame mode: {mode}")
         config["single_frame"] = mode
         return config
 
@@ -45,7 +44,6 @@ def parse_frame_mode(mode):
             parts = mode.split(":")
             if len(parts) == 4 and parts[0] == "fps":
                 fps_val, min_val, max_val = float(parts[1]), int(parts[2]), int(parts[3])
-                logger.info(f"🎬 Multi-frame mode: fps with custom params (fps={fps_val}, min={min_val}, max={max_val})")
                 config.update({
                     "selection_method": "fps",
                     "fps": fps_val,
@@ -64,7 +62,6 @@ def parse_frame_mode(mode):
             parts = mode.split(":")
             if len(parts) == 3 and parts[0] == "maxinfo":
                 max_input_val, max_val = int(parts[1]), int(parts[2])
-                logger.info(f"🧠 MaxInfo mode: max_input={max_input_val}, max={max_val}")
                 config.update({
                     "selection_method": "maxinfo",
                     "max_input_frames": max_input_val,
@@ -82,7 +79,6 @@ def parse_frame_mode(mode):
             parts = mode.split(":")
             if len(parts) == 3 and parts[0] == "csta":
                 max_input_val, max_val = int(parts[1]), int(parts[2])
-                logger.info(f"🎯 CSTA mode: max_input={max_input_val}, max={max_val}")
                 config.update({
                     "selection_method": "csta",
                     "max_input_frames": max_input_val,
@@ -100,7 +96,6 @@ def parse_frame_mode(mode):
             parts = mode.split(":")
             if len(parts) == 2 and parts[0] == "ufp":
                 n = int(parts[1])
-                logger.info(f"🎞️  UFP mode: uniform {n} frames")
                 config.update({
                     "selection_method": "uniform",
                     "num_frames": n,
