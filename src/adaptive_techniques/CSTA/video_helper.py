@@ -84,14 +84,12 @@ class VideoPreprocessor(object):
 
         feature_batches = []
 
-        with tqdm(total=total_frames, ncols=90, desc="getting features", unit='frame', leave=False) as pbar:
-            for i in range(0, total_frames, batch_size):
-                batch_imgs = frame_tensors[i:i + batch_size]
+        for i in range(0, total_frames, batch_size):
+            batch_imgs = frame_tensors[i:i + batch_size]
 
-                feats = self.model.run(batch_imgs)
+            feats = self.model.run(batch_imgs)
 
-                feature_batches.append(feats)
-                pbar.update(len(batch_imgs))
+            feature_batches.append(feats)
 
         features = torch.cat(feature_batches, dim=0)
         return total_frames, features

@@ -40,7 +40,7 @@ def get_clip_embeddings(frames, device, model, preprocess, batch_size=16):
     """
     all_embeddings = []
     with torch.no_grad():
-        for i in tqdm(range(0, len(frames), batch_size), desc="Extracting CLIP embeddings"):
+        for i in range(0, len(frames), batch_size):
             batch_frames = frames[i:i+batch_size]
 
             # GPU-optimized CLIP processing

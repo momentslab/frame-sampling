@@ -35,24 +35,33 @@ class Qwen2_5(VideoModel):
         self.processor = AutoProcessor.from_pretrained(model_path)
 
         # Set device
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "mps")
+        self.device = self._resolve_device()
 
         # Load model with proper configuration
-        if torch.cuda.is_available():
+        if self.device.type == "cuda":
+            torch.cuda.set_device(self.device)
             torch.backends.cuda.enable_flash_sdp(True)  # 20% memory savings
             torch.cuda.set_per_process_memory_fraction(0.9)  # Prevent GPU 0 overload
             os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
             self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                 model_path,
                 torch_dtype=torch.bfloat16,
-                device_map="auto",  # Always use auto for GPU placement
+                device_map=str(self.device),
                 attn_implementation="flash_attention_2"
-            )
+            ).eval()
         else:
+            model_dtype = torch.bfloat16 if self.device.type == "mps" else "auto"
             self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                 model_path,
-                torch_dtype=torch.bfloat16
-            ).to(self.device)
+                torch_dtype=model_dtype
+            ).to(self.device).eval()
+
+    def _resolve_device(self):
+        if torch.cuda.is_available():
+            return torch.device(f"cuda:{int(os.environ.get('LOCAL_RANK', 0))}")
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
 
 
     def predict(self, video_items: dict, prompt: str, max_tokens: int) -> str:
@@ -84,11 +93,11 @@ class Qwen2_5(VideoModel):
             return_tensors="pt"
         )
 
-        # Move tensors to device (CPU or MPS)
+        # Move tensors to the selected device
         inputs = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
 
         # Generate response
-        with torch.no_grad():
+        with torch.inference_mode():
             generated_ids = self.model.generate(**inputs, max_new_tokens=max_tokens)
 
         # Trim and decode outputs

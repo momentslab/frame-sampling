@@ -66,6 +66,10 @@ TASK_CATEGORIES = [
 ]
 
 
+def _compute_accuracy(correct: int, answered: int) -> float:
+    return 100 * correct / answered if answered > 0 else 0
+
+
 def create_plots(v_type_dict, v_sub_type_dict, q_type_dict, video_types, output_dir, model_name,
                  plot_categories=True, plot_sub_categories=True, plot_task_types=True):
     """Create and save plots for evaluation results"""
@@ -257,23 +261,18 @@ def eval_your_results(
             for question in questions:
                 q_type = question["task_type"]
 
-                # Get the ground truth and your response
-                gt_answer = question[gt_answer_key]
-                response = question[your_answer_key]
-                correct = question["correct"]
+                # Count every question in the denominator. Null / empty responses are
+                # therefore treated as wrong unless the question is explicitly marked correct.
+                correct = int(bool(question["correct"]))
 
-                # Extract the answer from the response
-                if not response:
-                    continue
-                else:
-                    q_type_dict[video_type][q_type]["answered"] += 1
-                    q_type_dict[video_type][q_type]["correct"] += correct
+                q_type_dict[video_type][q_type]["answered"] += 1
+                q_type_dict[video_type][q_type]["correct"] += correct
 
-                    v_type_dict[video_type][video_category]["answered"] += 1
-                    v_type_dict[video_type][video_category]["correct"] += correct
+                v_type_dict[video_type][video_category]["answered"] += 1
+                v_type_dict[video_type][video_category]["correct"] += correct
 
-                    v_sub_type_dict[video_type][video_sub_category]["answered"] += 1
-                    v_sub_type_dict[video_type][video_sub_category]["correct"] += correct
+                v_sub_type_dict[video_type][video_sub_category]["answered"] += 1
+                v_sub_type_dict[video_type][video_sub_category]["correct"] += correct
 
     # Print the results for each video type
     for video_type in video_types:
@@ -286,26 +285,26 @@ def eval_your_results(
             print("Video Categories")
             print("-------------------------------------")
             for v_type in v_type_dict[video_type]:
-                print(f"{v_type}: {100 * v_type_dict[video_type][v_type]['correct'] / v_type_dict[video_type][v_type]['answered'] if v_type_dict[video_type][v_type]['answered'] > 0 else 0 : .1f}%")
+                print(f"{v_type}: {_compute_accuracy(v_type_dict[video_type][v_type]['correct'], v_type_dict[video_type][v_type]['answered']) : .1f}%")
         if return_sub_categories_accuracy:
             print("-------------------------------------")
             print("Video Sub Categories")
             print("-------------------------------------")
             for v_sub_type in v_sub_type_dict[video_type]:
-                print(f"{v_sub_type}: {100 * v_sub_type_dict[video_type][v_sub_type]['correct'] / v_sub_type_dict[video_type][v_sub_type]['answered'] if v_sub_type_dict[video_type][v_sub_type]['answered'] > 0 else 0 : .1f}%")
+                print(f"{v_sub_type}: {_compute_accuracy(v_sub_type_dict[video_type][v_sub_type]['correct'], v_sub_type_dict[video_type][v_sub_type]['answered']) : .1f}%")
         if return_task_types_accuracy:
             print("-------------------------------------")
             print("Task Categories")
             print("-------------------------------------")
             for q_type in q_type_dict[video_type]:
-                print(f"{q_type}: {100 * q_type_dict[video_type][q_type]['correct'] / q_type_dict[video_type][q_type]['answered'] if q_type_dict[video_type][q_type]['answered'] > 0 else 0 : .1f}%")
+                print(f"{q_type}: {_compute_accuracy(q_type_dict[video_type][q_type]['correct'], q_type_dict[video_type][q_type]['answered']) : .1f}%")
         
         print("-------------------------------------")
         print("Overall Performance")
         print("-------------------------------------")
         total_correct = sum([q_type_dict[video_type][q_type]["correct"] for q_type in TASK_CATEGORIES])
         total_answered = sum([q_type_dict[video_type][q_type]["answered"] for q_type in TASK_CATEGORIES])
-        print(f"Overall: {100 * total_correct / total_answered if total_answered > 0 else 0 : .1f}%")
+        print(f"Overall: {_compute_accuracy(total_correct, total_answered) : .1f}%")
 
         print("\n")
 
@@ -321,7 +320,7 @@ def eval_your_results(
         for v_type in CATEGORIES:
             total_correct = sum([v_type_dict[video_type][v_type]["correct"] for video_type in video_types])
             total_answered = sum([v_type_dict[video_type][v_type]["answered"] for video_type in video_types])
-            print(f"{v_type}: {100 * total_correct / total_answered if total_answered > 0 else 0 : .1f}%")
+            print(f"{v_type}: {_compute_accuracy(total_correct, total_answered) : .1f}%")
     
     if return_sub_categories_accuracy:
         print("-------------------------------------")
@@ -331,7 +330,7 @@ def eval_your_results(
         for v_sub_type in SUB_CATEGORIES:
             total_correct = sum([v_sub_type_dict[video_type][v_sub_type]["correct"] for video_type in video_types])
             total_answered = sum([v_sub_type_dict[video_type][v_sub_type]["answered"] for video_type in video_types])
-            print(f"{v_sub_type}: {100 * total_correct / total_answered if total_answered > 0 else 0 : .1f}%")
+            print(f"{v_sub_type}: {_compute_accuracy(total_correct, total_answered) : .1f}%")
 
     if return_task_types_accuracy:
         print("-------------------------------------")
@@ -341,14 +340,14 @@ def eval_your_results(
 
             total_correct = sum([q_type_dict[video_type][q_type]["correct"] for video_type in video_types])
             total_answered = sum([q_type_dict[video_type][q_type]["answered"] for video_type in video_types])
-            print(f"{q_type}: {100 * total_correct / total_answered if total_answered > 0 else 0 : .1f}%")
+            print(f"{q_type}: {_compute_accuracy(total_correct, total_answered) : .1f}%")
 
     print("-------------------------------------")
     print("Overall Performance")
     print("-------------------------------------")
     total_correct = sum([sum([q_type_dict[video_type][q_type]["correct"] for q_type in TASK_CATEGORIES]) for video_type in video_types])
     total_answered = sum([sum([q_type_dict[video_type][q_type]["answered"] for q_type in TASK_CATEGORIES]) for video_type in video_types])
-    overall_accuracy = 100 * total_correct / total_answered if total_answered > 0 else 0
+    overall_accuracy = _compute_accuracy(total_correct, total_answered)
     print(f"Overall: {overall_accuracy : .1f}%")
 
     # Generate plots if requested (based on the same flags as text output)
@@ -361,15 +360,21 @@ def eval_your_results(
     # Return results as dictionary if requested
     if return_dict:
         results_dict = {
-            "overall_performance": round(overall_accuracy, 2)
+            "overall_performance": round(overall_accuracy, 2),
+            "video_durations": {},
         }
+
+        for video_type in video_types:
+            total_correct = sum([q_type_dict[video_type][q_type]["correct"] for q_type in TASK_CATEGORIES])
+            total_answered = sum([q_type_dict[video_type][q_type]["answered"] for q_type in TASK_CATEGORIES])
+            results_dict["video_durations"][video_type] = round(_compute_accuracy(total_correct, total_answered), 2)
 
         if return_categories_accuracy:
             results_dict["video_categories"] = {}
             for v_type in CATEGORIES:
                 total_correct = sum([v_type_dict[video_type][v_type]["correct"] for video_type in video_types])
                 total_answered = sum([v_type_dict[video_type][v_type]["answered"] for video_type in video_types])
-                accuracy = 100 * total_correct / total_answered if total_answered > 0 else 0
+                accuracy = _compute_accuracy(total_correct, total_answered)
                 results_dict["video_categories"][v_type] = round(accuracy, 2)
 
         if return_sub_categories_accuracy:
@@ -377,7 +382,7 @@ def eval_your_results(
             for v_sub_type in SUB_CATEGORIES:
                 total_correct = sum([v_sub_type_dict[video_type][v_sub_type]["correct"] for video_type in video_types])
                 total_answered = sum([v_sub_type_dict[video_type][v_sub_type]["answered"] for video_type in video_types])
-                accuracy = 100 * total_correct / total_answered if total_answered > 0 else 0
+                accuracy = _compute_accuracy(total_correct, total_answered)
                 results_dict["video_sub_categories"][v_sub_type] = round(accuracy, 2)
 
         if return_task_types_accuracy:
@@ -385,7 +390,7 @@ def eval_your_results(
             for q_type in TASK_CATEGORIES:
                 total_correct = sum([q_type_dict[video_type][q_type]["correct"] for video_type in video_types])
                 total_answered = sum([q_type_dict[video_type][q_type]["answered"] for video_type in video_types])
-                accuracy = 100 * total_correct / total_answered if total_answered > 0 else 0
+                accuracy = _compute_accuracy(total_correct, total_answered)
                 results_dict["task_categories"][q_type] = round(accuracy, 2)
 
         return results_dict

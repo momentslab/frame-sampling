@@ -1,5 +1,6 @@
 import torch
 import time
+import math
 import torchvision
 from packaging import version
 import warnings
@@ -92,8 +93,6 @@ def my_custom_read_video_torchvision(ele: dict, **kwargs):
             frame_indices, num_frames = _get_multi_frame_indices(
                 ele, start_frame, end_frame, total_frames, video_fps
             )
-            print(f"fps: {num_frames=}")
-            
         elif selection_method == "maxinfo":
             frame_indices, num_frames = _get_multi_frame_indices_maxinfo(
                 decoder, total_frames,
@@ -101,12 +100,8 @@ def my_custom_read_video_torchvision(ele: dict, **kwargs):
                 max_input_frames=ele.get("max_input_frames")
             )
             
-            print(f"maxinfo: {num_frames=}")
             global_frame_count += num_frames
             global_call_count += 1
-            average_frames = global_frame_count / global_call_count
-            print(f"Average frames per call: {average_frames:.2f}")
-            
 
         elif selection_method == "csta":
            frame_indices, num_frames = _get_multi_frame_indices_csta(
@@ -114,15 +109,18 @@ def my_custom_read_video_torchvision(ele: dict, **kwargs):
                 max_frames=ele.get("max_frames"),
                 max_input_frames=ele.get("max_input_frames"),
            )
-           
-           print(f"csta: {num_frames=}")
+
            global_frame_count += num_frames
            global_call_count += 1
-           average_frames = global_frame_count / global_call_count
-           print(f"Average frames per call: {average_frames:.2f}")
-           
+
+        elif selection_method == "uniform":
+            frame_indices, num_frames = _get_uniform_frame_indices(ele, total_frames)
+
+        elif selection_method == "clips":
+            frame_indices, num_frames = _get_clip_frame_indices(ele, total_frames, video_fps)
+
         else:
-            raise ValueError(f"Invalid selection_method: {selection_method}. Use 'fps', 'maxinfo', or 'csta'")
+            raise ValueError(f"Invalid selection_method: {selection_method}. Use 'fps', 'maxinfo', 'csta', 'uniform', or 'clips'")
 
     # Extract video frames
     video_tensor = decoder.get_frames_at(indices=frame_indices).data
@@ -206,12 +204,115 @@ def _get_multi_frame_indices(ele, start_frame, end_frame, total_frames, video_fp
     frame_indices = torch.linspace(start_frame, end_frame, num_frames).round().long().tolist()
     return frame_indices, num_frames
 
+
+def _get_uniform_frame_indices(ele, total_frames):
+    """Uniformly sample exactly N frames spread across the full video duration.
+
+    Args:
+        ele: Video configuration dict containing 'num_frames' (default 8).
+        total_frames: Total number of frames in the video.
+
+    Returns:
+        tuple: (frame_indices_list, num_frames)
+    """
+    n = min(int(ele.get("num_frames", 8)), total_frames)
+    frame_indices = torch.linspace(0, total_frames - 1, n).round().long().tolist()
+    return frame_indices, n
+
+
+def _get_clip_frame_indices(ele, total_frames, video_fps):
+    """Sample frames from a video by splitting it into clips at a target FPS.
+
+    Ported from MomentsVLM's clip_sample_indices logic.
+
+    Args:
+        ele: Video configuration dict containing:
+            - frames_per_clip (int, default 8): frames sampled per clip
+            - max_clips_per_video (int, default 32): maximum number of clips
+            - target_fps (float, default 1.0): target sampling FPS
+            - clip_sampling_ratio (float, default 1.0): controls clip density
+        total_frames: Total number of frames in the video.
+        video_fps: Native FPS of the video.
+
+    Returns:
+        tuple: (frame_indices_list, num_frames)
+    """
+    frames_per_clip = int(ele.get("frames_per_clip", 8))
+    max_clips_per_video = int(ele.get("max_clips_per_video", 32))
+    target_fps = float(ele.get("target_fps", 1.0))
+    clip_sampling_ratio = float(ele.get("clip_sampling_ratio", 1.0))
+
+    original_fps = video_fps
+    video_duration = total_frames / original_fps if original_fps else 0
+
+    if target_fps is None or target_fps <= 0:
+        target_fps = original_fps
+
+    # Duration of one clip at the target FPS
+    clip_duration = frames_per_clip / target_fps
+
+    # How many clips fit in the video
+    desired_clips = math.ceil((video_duration / clip_duration) * clip_sampling_ratio) if clip_duration > 0 else 1
+    num_clips = min(max(desired_clips, 1), max_clips_per_video)
+
+    # How many original frames correspond to one target frame
+    frame_step = original_fps / target_fps
+
+    all_indices = []
+
+    if frame_step > 0.5:
+        # Normal case: target FPS <= original FPS
+        frame_step_int = max(1, int(frame_step))
+        clip_len = frames_per_clip * frame_step_int
+        partition_len = total_frames // num_clips
+
+        for i in range(num_clips):
+            if partition_len > clip_len:
+                start_idx = i * partition_len + (partition_len - clip_len) // 2
+                indices = np.arange(start_idx, start_idx + clip_len, frame_step_int)
+            else:
+                sample_len = min(clip_len, total_frames)
+                clip_step = (total_frames - sample_len) // max(1, num_clips - 1) if total_frames > sample_len else 0
+                start_idx = i * clip_step
+                indices = np.arange(start_idx, start_idx + sample_len, frame_step_int)
+
+            if len(indices) > frames_per_clip:
+                indices = indices[:frames_per_clip]
+            elif len(indices) < frames_per_clip:
+                last_valid = min(start_idx + clip_len - 1, total_frames - 1)
+                padding = np.full(frames_per_clip - len(indices), last_valid)
+                indices = np.concatenate((indices, padding))
+
+            indices = np.clip(indices, 0, total_frames - 1).astype(np.int64)
+            all_indices.extend(indices.tolist())
+
+    else:
+        # Low FPS case: need to repeat frames
+        repeat_factor = int(np.ceil(1 / frame_step))
+        clip_len = max(1, int(frames_per_clip * frame_step))
+        sample_len = min(clip_len, total_frames)
+
+        for i in range(num_clips):
+            clip_step = (total_frames - sample_len) // max(1, num_clips - 1) if total_frames > sample_len else 0
+            base_indices = np.arange(i * clip_step, i * clip_step + sample_len)
+            indices = np.repeat(base_indices, repeat_factor)
+
+            if len(indices) > frames_per_clip:
+                indices = indices[:frames_per_clip]
+            elif len(indices) < frames_per_clip:
+                last_valid = min(i * clip_step + sample_len - 1, total_frames - 1)
+                padding = np.full(frames_per_clip - len(indices), last_valid)
+                indices = np.concatenate((indices, padding))
+
+            indices = np.clip(indices, 0, total_frames - 1).astype(np.int64)
+            all_indices.extend(indices.tolist())
+
+    return all_indices, len(all_indices)
+
+
 def _get_multi_frame_indices_maxinfo(decoder, total_frames, max_frames=96, max_input_frames=1000):
     """Get indices for multi-frame extraction using MaxInfo algorithm."""
     # Use ALL frames for maxinfo algorithm (up to max_input_frames limit)
-    start = time.time()
-
-
     # Extract all frames safely using batch processing
     all_frames, initial_indices = call_frames(decoder, total_frames, max_frames=max_input_frames)
 
@@ -225,9 +326,6 @@ def _get_multi_frame_indices_maxinfo(decoder, total_frames, max_frames=96, max_i
     )
 
     final_indices = [initial_indices[i] for i in sorted(selected_indices)]
-    end = time.time()
-
-    print(f"Execution time: {end - start:.4f} seconds")
 
     return final_indices, len(final_indices)
 
@@ -257,9 +355,6 @@ def _get_multi_frame_indices_csta(decoder, total_frames, video_fps, max_frames=9
         indices = np.linspace(0, len(final_indices) - 1, num=max_frames, dtype=int).tolist()
         final_indices = [final_indices[i] for i in indices]
 
-    end = time.time()
-
-    print(f"Execution time: {end - start:.4f} seconds")
     return final_indices, len(final_indices)
 
 
@@ -269,7 +364,7 @@ def _cache_video_info(video_path, video_fps, total_frames, num_frames, frame_ind
         "Video_fps": int(video_fps),
         "Total_frames": total_frames,
         "Nframes": num_frames,
-        "Indices": str(frame_indices)
+        "Indices": list(frame_indices)
     }
 
 

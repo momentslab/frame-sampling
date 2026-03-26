@@ -11,10 +11,10 @@ dependencies = ["pydantic>=2.11.3",
     "ninja>=1.11.1.4",
     "pillow>=11.2.1",
     #"pyav>=14.2.1; sys_platform != 'darwin'",
-    "accelerate>=1.9.0",
+    "accelerate>=1.13.0",
     "av>=14.3.0",
     "huggingface-hub[cli,hf_transfer]>=0.31.2",
-    "qwen-vl-utils>=0.0.11",
+    "qwen-vl-utils==0.0.14",
     "torchvision>=0.22.0",
     "dataclasses-json>=0.6.7",
     "boto3>=1.38.19",
@@ -40,8 +40,8 @@ dependencies = ["pydantic>=2.11.3",
     "torchinfo>=1.8.0",
     "deepspeed>=0.17.2",
     "yt-dlp>=2025.7.21",
-    "flash-attn==2.7.0.post2",
-    "loguru>=0.7.3"]
+    "loguru>=0.7.3",
+    "flash-attn==2.7.0.post2"]
 requires-python = ">=3.10,<3.13"
 readme = "README.md"
 license = {text = "MIT"}

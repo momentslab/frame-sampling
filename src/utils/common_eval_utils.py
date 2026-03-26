@@ -8,12 +8,13 @@ prompt creation, answer extraction, and video configuration.
 from typing import Dict, Any, Optional
 import json
 from pathlib import Path
+from tqdm import tqdm
 from models.utils import parse_frame_mode
 from video_manager.global_video_info import video_info_cache
 
 
 # Supported models
-SUPPORTED_MODELS = ["ovis", "smolvlm", "qwen2", "qwen2_5", "intern"]
+SUPPORTED_MODELS = ["ovis", "smolvlm", "qwen2", "qwen2_5", "intern", "apollo"]
 
 # Answer options
 ANSWER_OPTIONS = ['A', 'B', 'C', 'D']
@@ -67,7 +68,7 @@ def extract_answer(response: Optional[str]) -> Optional[str]:
         if option in response_upper:
             return option
     
-    print(f"⚠️ Could not extract valid answer from: {response}")
+    tqdm.write(f"⚠️  Could not extract valid answer from: {response}")
     return None
 
 
@@ -148,12 +149,14 @@ def save_frame_indices_json(output_dir: str = "./frame_indices", benchmark_name:
     frames_data = {}
 
     for video_path, info in video_info_cache.items():
-        # Parse the indices string to a list
-        indices_str = info.get('Indices', '[]')
-        try:
-            indices = eval(indices_str)
-        except:
-            indices = []
+        indices_value = info.get('Indices', [])
+        if isinstance(indices_value, list):
+            indices = indices_value
+        else:
+            try:
+                indices = eval(indices_value)
+            except Exception:
+                indices = []
 
         frames_data[video_path] = {
             "frames": indices,

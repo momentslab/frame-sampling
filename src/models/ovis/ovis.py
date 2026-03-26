@@ -15,27 +15,38 @@ class Ovis(VideoModel):
         # Initialize model components
         self._setup_model()
 
+    def _resolve_device(self) -> torch.device:
+        if torch.cuda.is_available():
+            return torch.device(f"cuda:{int(os.environ.get('LOCAL_RANK', 0))}")
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+
     def _setup_model(self):
         """Initialize the Ovis model with optimized GPU configuration."""
         model_path = "AIDC-AI/Ovis2-2B"
+        self.device = self._resolve_device()
         
         # Set device configuration
-        if torch.cuda.is_available():
+        if self.device.type == "cuda":
             # Enable GPU optimizations (excluding flash attention)
-            torch.cuda.set_per_process_memory_fraction(0.9)  # Prevent GPU 0 overload
-            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-            self.device = torch.device("cuda")
+            torch.cuda.set_per_process_memory_fraction(0.9, device=self.device)
+            os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
-            # Load model with proper configuration
+            # Under torchrun, transformers>=5 treats device_map="auto" as a
+            # tensor-parallel request, and Ovis does not define a TP plan.
+            # Even a single-device device_map still hits a transformers
+            # caching_allocator_warmup path that assumes _tp_plan is iterable
+            # for this custom model, so load on CPU first and move the full
+            # model to the rank-local GPU.
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
                 torch_dtype=torch.bfloat16,
                 multimodal_max_length=32768,
                 trust_remote_code=True,
-                device_map="auto"  # Always use auto for GPU placement
-            )
+                low_cpu_mem_usage=True,
+            ).to(self.device)
         else:
-            self.device = torch.device("mps")
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
                 torch_dtype=torch.bfloat16,
@@ -43,6 +54,7 @@ class Ovis(VideoModel):
                 trust_remote_code=True
             ).to(self.device)
 
+        self.model.eval()
         logger.info(f"Model loaded on devices: {self.model.hf_device_map if hasattr(self.model, 'hf_device_map') else 'single device'}")
         logger.info("Model defined in file: %s", inspect.getfile(type(self.model)))
 
@@ -63,8 +75,8 @@ class Ovis(VideoModel):
         )
         
         attention_mask = torch.ne(input_ids, text_tokenizer.pad_token_id)
-        input_ids = input_ids.unsqueeze(0).to(self.model.device)
-        attention_mask = attention_mask.unsqueeze(0).to(self.model.device)
+        input_ids = input_ids.unsqueeze(0).to(self.device)
+        attention_mask = attention_mask.unsqueeze(0).to(self.device)
 
         if pixel_values is not None:
             pixel_values = pixel_values.to(

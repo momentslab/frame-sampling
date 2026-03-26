@@ -20,3 +20,11 @@ scripts_test/
 .vscode/
 *.pyc
 __pycache__/
+
+src/models/apollo/stage3-siglip-perceiver-256/
+results/
+results_cp_1/
+results_backup/
+frame_indices/
+scripts/runs/
+
