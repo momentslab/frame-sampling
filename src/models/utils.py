@@ -14,7 +14,7 @@ from .qwen2_5.qwen2_5 import Qwen2_5
 from .qwen2.qwen2 import Qwen2
 from .intern.intern import Intern
 from .ovis.ovis import Ovis
-from .apollo.apollo import Apollo
+#from .apollo.apollo import Apollo
 #from .qwen3.qwen3 import Qwen3
 
 # Configure logger for this module
